@@ -156,7 +156,6 @@ def parse_metadata(adata, metadata_path, sample_key="sample"):
         # Setting index on metadata allows for a cleaner join
         samples_metadata = samples_metadata.set_index(sample_key)
         
-        # Efficiently map the new columns onto the observations
         adata.obs = adata.obs.join(samples_metadata, on=sample_key, how="left")
 
         for col in adata.obs.columns:
@@ -173,7 +172,7 @@ def parse_metadata(adata, metadata_path, sample_key="sample"):
         raise
 
 
-def main(input_pkl,metadata_path, sample_key):
+def main(input_pkl,metadata_path, sample_key, filename):
 
     adatas = load_adatas(input_pkl)
 
@@ -192,9 +191,7 @@ def main(input_pkl,metadata_path, sample_key):
 
     # remove deprecated genes
     adatas_concat = adatas_concat[:, ~adatas_concat.var.index.str.contains('DEPRECATED_')] 
-    
-    adatas_concat.obs["sample"] = adatas_concat.obs["sample"].str.replace(r"_P\d+$", "", regex=True) #remove _P0* tail from sample names 
-    
+        
     # setting cell names as column
     adatas_concat.obs['cell_name'] = adatas_concat.obs.index.values.copy()
     
@@ -204,9 +201,12 @@ def main(input_pkl,metadata_path, sample_key):
     #Add metadata
     adata = parse_metadata(adatas_concat, metadata_path, sample_key=sample_key)
 
+    # Set counts layer
+    adata.layers['counts'] = adata.X
+
 
     print("Saving adata after QC...")
-    adatas_concat.write('01_adata_concat_QC.h5ad')
+    adatas_concat.write(f'01_{filename}_concat_QC.h5ad')
     print("QC completed!")
 
 
@@ -215,10 +215,12 @@ if __name__ == "__main__":
     parser.add_argument('--data_pkl', required=True, help='Path to the pkl file containing a dictionary sample:Anndata')
     parser.add_argument('--metadata_path', required=True, help='Path to the sample metadata')
     parser.add_argument('--sample_key', required=True, help='Metadata field containing sample names')
+    parser.add_argument('-f', '--filename', type=str, required=False, default='adata', help='Filename for the output files')
 
     
     args = parser.parse_args()
     
     main(args.data_pkl,
         args.metadata_path,
-        args.sample_key)
+        args.sample_key,
+        args.filename)

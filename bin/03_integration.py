@@ -58,14 +58,12 @@ def get_hvg_batch(adata, layer, batch_key, n_genes):
 
 def preprocess_adata(adata, layer, batch_key, n_genes):
 
-    adata.layers[layer] = adata.X.copy() #save raw counts
-
     # Exclude outliers
     adata = adata[~adata.obs['outlier']].copy()
 
     adata = get_hvg_batch(adata, layer, batch_key, n_genes)
 
-    sc.pp.normalize_total(adata, target_sum=None, inplace=True) # normalize from counts in case adata.X is scaled
+    sc.pp.normalize_total(adata, target_sum=None, inplace=True)
     sc.pp.log1p(adata)
 
     sc.pp.pca(adata, use_highly_variable=True, key_added= 'Unintegrated')
@@ -73,57 +71,32 @@ def preprocess_adata(adata, layer, batch_key, n_genes):
     return adata
 
 
-def merge_adata(*adata_list, **kwargs):
-    """
-    Merge adatas from list while remove duplicated ``obs`` and ``var`` columns.
-    Based on scib -> https://github.com/theislab/scib/blob/59ae6eee5e611d9d3db067685ec96c28804e9127/scib/utils.py#L51C1-L72C62
-
-    :param adata_list: ``anndata`` objects to be concatenated
-    :param kwargs: arguments to be passed to ``anndata.AnnData.concatenate``
-    """
-
-    if len(adata_list) == 1:
-        return adata_list[0]
-
-    # Make sure that adatas do not contain duplicate columns
-    for _adata in adata_list:
-        for attr in ("obs", "var"):
-            df = getattr(_adata, attr)
-            dup_mask = df.columns.duplicated()
-            if dup_mask.any():
-                print(
-                    f"Deleting duplicated keys `{list(df.columns[dup_mask].unique())}` from `adata.{attr}`."
-                )
-                setattr(_adata, attr, df.loc[:, ~dup_mask])
-
-    return ad.AnnData.concatenate(*adata_list, **kwargs) 
-
 
 def dim_reduction_plotting(adata, filename, batch_key, reduction:str):
 
     sc.pp.neighbors(adata, use_rep=reduction)
     sc.tl.umap(adata, min_dist=0.2, spread=5, random_state=42)
 
-    axes = sc.pl.umap(adata, color='scDblFinder_class', show=False)
+    axes = sc.pl.umap(adata, color=batch_key, show=False)
     fig = axes.get_figure()
-    fig.savefig(f'{filename}_UMAP_{reduction}.png')
+    fig.savefig(f'{filename}_UMAP_{reduction}.png', bbox_inches='tight')
 
     print(f'\nUMAP plot for {reduction} succesfully generated!', flush=True)
 
 
-def plot_doublets(adata, filename):
+def plot_doublets(adata, filename, batch_key):
 
     sc.pp.neighbors(adata, use_rep='Unintegrated')
     sc.tl.umap(adata, min_dist=0.2, spread=5, random_state=42)
 
-    axes = sc.pl.umap(adata, color=batch_key, show=False)
+    axes = sc.pl.umap(adata, color='scDblFinder_class', show=False)
     fig = axes.get_figure()
-    fig.savefig(f'{filename}_UMAP_{reduction}.png')
+    fig.savefig(f'{filename}_UMAP_doublets.png')
 
     # exclude doublets
     adata = adata[adata.obs['scDblFinder_class'] == 'singlet']
 
-    print(f'\nUMAP plot for {reduction} succesfully generated!', flush=True)
+    print(f'\nUMAP plot for doublets succesfully generated!', flush=True)
 
 
 
@@ -151,17 +124,26 @@ def scanorama_integration(adata, adata_integ, batch_key):
     if not isinstance(adata_integ.obs[batch_key].dtype, pd.CategoricalDtype):
         adata_integ.obs[batch_key] = adata_integ.obs[batch_key].astype('category')
 
-    split = []
-    for i in batch_categories:
-        split.append(adata_integ[adata_integ.obs[batch_key] == i].copy())
-    
-    scanorama.integrate_scanpy(split, dimred = 50)
+    adata_integ.obs[batch_key] = adata_integ.obs[batch_key].cat.remove_unused_categories()
 
-    scanorama_int = [ad.obsm['X_scanorama'] for ad in split]
+    adata_list = [
+        adata_integ[adata_integ.obs[batch_key] == batch_value].copy() 
+        for batch_value in adata_integ.obs[batch_key].unique()
+        ]    
 
+    scanorama.integrate_scanpy(adata_list, dimred = 100)
+
+    scanorama_int = [ad.obsm['X_scanorama'] for ad in adata_list]
+    cell_names = [ad.obs_names for ad in adata_list]
+
+    # Concatenate embeddings and their corresponding barcodes
     all_s = np.concatenate(scanorama_int)
+    all_cells = np.concatenate(cell_names)
 
-    adata.obsm["Scanorama"] = all_s
+    df_embeddings = pd.DataFrame(all_s, index=all_cells)
+    df_embeddings_aligned = df_embeddings.loc[adata.obs_names]
+
+    adata.obsm["Scanorama"] = df_embeddings_aligned.values
 
     print('\n>>> Scanorama integration done!', flush=True)
     
@@ -229,7 +211,7 @@ def seurat_RPCA(adata, adata_integ, layer, batch_key):
     return adata
 
 
-def STACAS(adata, adata_integ, layer, batch_key):
+def STACAS(adata, adata_integ, layer, batch_key, label_key):
 
     print('\n>>> Running STACAS integration', flush=True)
 
@@ -243,6 +225,7 @@ def STACAS(adata, adata_integ, layer, batch_key):
     with localconverter(anndata2ri.converter):
         ro.globalenv["seurat"] = adata_integ
         ro.globalenv["batch_key"] = batch_key
+        ro.globalenv["label_key"] = label_key
 
         ro.r('''
 
@@ -254,7 +237,7 @@ def STACAS(adata, adata_integ, layer, batch_key):
              
         seurat_list <- SplitObject(seurat_obj, split.by = batch_key)
              
-        stacas_obj <- Run.STACAS(seurat_list, verbose = FALSE)
+        stacas_obj <- Run.STACAS(seurat_list, verbose = FALSE, cell.labels = label_key)
   
         stacas_embeddings <- Embeddings(stacas_obj, "pca")
              
@@ -317,35 +300,6 @@ def scANVI_integration(adata, adata_integ, model_scvi, label_key, batch_key):
     return adata
 
 
-def integration_metrics(adata, batch_key, label_key, filename):
-
-    print('\n>>> Calculating integration metrics', flush=True)
-
-    valid_embeds = [emb for emb in adata.obsm.keys() if 'umap' not in emb.lower()]
-
-    print(f"Detected embeddings: {valid_embeds}")
-
-    bm = Benchmarker(
-        adata,
-        batch_key=batch_key,
-        label_key=label_key,
-        embedding_obsm_keys=valid_embeds,
-        n_jobs=1
-        )
-
-    bm.benchmark()
-
-    metrics = bm.get_results(min_max_scale=False)
-
-    metrics.to_csv(f"{filename}_benchmark_results.csv")
-
-    bm.plot_results_table(
-        min_max_scale=False, 
-        show=False,
-        save_dir=".")
-
-    print('\n>>> Metrics calculation done!', flush=True)
-
 
 
 def main(adata_dir, n_genes= 2000, layer='counts', label_key='cell_type', batch_key='batch', filename = 'adata'):
@@ -374,9 +328,6 @@ def main(adata_dir, n_genes= 2000, layer='counts', label_key='cell_type', batch_
 
     # ---------- Seurat RPCA integration ---------
     adata = seurat_RPCA(adata, adata_integ, layer, batch_key)
-
-    # ----------- STACAS integration ---------
-    adata = STACAS(adata, adata_integ, layer, batch_key)
     
     # ---------- Scanorama integrarion ----------
     adata = scanorama_integration(adata, adata_integ, batch_key)
@@ -391,14 +342,20 @@ def main(adata_dir, n_genes= 2000, layer='counts', label_key='cell_type', batch_
     if not lk_present:
         print(f"Label key: {lk_present} not present in adata.obs, skipping scANVI integration and metrics calculation.", flush=True)
     else:
+          # ----------- STACAS integration ---------
+        adata = STACAS(adata, adata_integ, layer, batch_key, label_key)
+
+        # ---------- scVI integrarion ---------------
         adata = scANVI_integration(adata, adata_integ, model_scvi, label_key, batch_key)
-        integration_metrics(adata, batch_key, label_key, filename)
+        #integration_metrics(adata, batch_key, label_key, filename)
 
     
-    adata.write(f"{filename}_integration_benchmark.h5ad")
+    adata.write(f"03_{filename}_integration_benchmark.h5ad")
     print(f'Adata saved!', flush=True)
 
-    plot_methods = list(adata.obsm.keys())
+    #plot_doublets(adata, filename, batch_key)
+
+    plot_methods = [r for r in adata.obsm.keys() if r not in ['X_pca', 'X_umap']] # original is called unintegrated
 
     for reduction in plot_methods:
         dim_reduction_plotting(adata, filename, batch_key, reduction)

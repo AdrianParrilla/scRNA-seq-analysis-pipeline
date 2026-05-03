@@ -11,6 +11,8 @@ import seaborn as sns
 import matplotlib.pyplot as plt
 from scipy.stats import median_abs_deviation as mad
 
+warnings.filterwarnings('ignore', category=UserWarning)
+
 
 def get_qc_thresholds(df_genes, groupby_key)-> pd.DataFrame:
 
@@ -85,27 +87,40 @@ def get_colors(df, color_by):
     return color_palette
 
 
-def save_thresholds(qc_thresholds_upper, qc_thresholds_lower):
+def save_thresholds(qc_thresholds_upper, qc_thresholds_lower, sample_key, filename):
     
-    thresholds = pd.merge(qc_thresholds_upper, qc_thresholds_lower, on='sample', suffixes=('_upper', '_lower'), how='inner')
+    thresholds = pd.merge(qc_thresholds_upper, qc_thresholds_lower, on=sample_key, suffixes=('_upper', '_lower'), how='inner')
 
     # reorder columns
     thresholds = thresholds[['log1p_n_genes_by_counts_lower', 'log1p_total_counts_upper', 'pct_counts_in_top_20_genes_lower', 'pct_counts_in_top_20_genes_upper', 'pct_counts_mt']]
 
-    thresholds.to_csv('QC_thresholds.csv', index=True)
+    thresholds.to_csv(f'{filename}_QC_thresholds.csv', index=True)
 
 
-def save_QC_summary(df_genes, color_by):
+def save_QC_cell_counts(df_genes, color_by, sample_key, filename):
 
     df_genes['scDblFinder_class'] = pd.Categorical(df_genes['scDblFinder_class']).rename_categories({1: 'singlet', 2: 'doublet'})
 
-    counts = df_genes.groupby(['sample', 'outlier', 'scDblFinder_class', color_by],observed= True ).size().reset_index(name='total')
+    counts = df_genes.groupby([sample_key, 'outlier', 'scDblFinder_class', color_by],observed= True ).size().reset_index(name='total')
 
-    counts.to_csv('QC_summary.csv', index=True)
+    counts.to_csv(f'{filename}_QC_cell_counts.csv', index=True)
 
 
+def save_QC_metrics(adata, sample_key, filename):
+    metrics = ['log1p_total_counts','log1p_n_genes_by_counts','pct_counts_in_top_20_genes','pct_counts_mt']
 
-def plot_qc(adata, sample_key, color_by, figsize: tuple, custom_order: list = None):
+    metrics_df = []
+    for metric in metrics:
+        metric_df = adata.obs.groupby(sample_key)[metric].describe()
+        metric_df['metric'] = metric
+
+        metrics_df.append(metric_df)
+
+    metrics_df_all = pd.concat(metrics_df, axis=0)
+    metrics_df_all.to_csv(f'{filename}_QC_summary.csv')
+
+
+def plot_qc(adata, sample_key, color_by, filename, figsize: tuple, custom_order: list = None):
 
     warnings.simplefilter(action='ignore', category=FutureWarning)
 
@@ -131,8 +146,9 @@ def plot_qc(adata, sample_key, color_by, figsize: tuple, custom_order: list = No
     
     qc_thresholds_upper, qc_thresholds_lower = get_qc_thresholds(df_genes, groupby_key=sample_key)
 
-    save_thresholds(qc_thresholds_upper, qc_thresholds_lower)
-    save_QC_summary(df_genes, color_by)
+    save_thresholds(qc_thresholds_upper, qc_thresholds_lower, sample_key, filename)
+    save_QC_cell_counts(df_genes, color_by, sample_key, filename)
+    save_QC_metrics(adata, sample_key, filename)
 
     color_palette = get_colors(df_genes, color_by)
 
@@ -199,7 +215,10 @@ def plot_qc(adata, sample_key, color_by, figsize: tuple, custom_order: list = No
         y_ticks=ref_y_ticks, y_labels=ref_y_labels)
 
     ax.set_xlabel('%mt counts', size=14, labelpad=10)
-    ax.get_legend().remove()
+
+    if ax.get_legend():
+        ax.get_legend().remove()
+
     ax.grid(False)
 
     ax = axes[4]
@@ -236,7 +255,7 @@ def plot_qc(adata, sample_key, color_by, figsize: tuple, custom_order: list = No
     sns.set_style('ticks')
     plt.subplots_adjust(hspace=0.02)
     
-    fig.savefig("QC_violin_plots.png", dpi=300, bbox_inches='tight')
+    fig.savefig(f"{filename}_QC_violin_plots.png", dpi=300, bbox_inches='tight')
     print("QC violin plots generated!")
 
 
@@ -256,7 +275,7 @@ def doublet_count(adata, sample_key, color_by):
     return doublet_count
 
 
-def plot_doublets(adata, sample_key, color_by: str, figsize:tuple = None):
+def plot_doublets(adata, sample_key, color_by: str, filename, figsize:tuple = None):
 
     doublet_counts = doublet_count(adata, sample_key, color_by)
 
@@ -286,18 +305,18 @@ def plot_doublets(adata, sample_key, color_by: str, figsize:tuple = None):
     plt.legend("")
     plt.grid(False)
 
-    fig.savefig("QC_doublet_count.png", dpi=300, bbox_inches='tight')
+    fig.savefig(f"{filename}_QC_doublet_count.png", dpi=300, bbox_inches='tight')
     print("Doublets plot generated!")
 
 
-def main(adata_dir, sample_key, color_by):
+def main(adata_dir, sample_key, color_by, filename):
 
     print('\n>>> Loading adata...', flush=True)
     adata = sc.read_h5ad(adata_dir)
     print('\n>>> adata succesfully loaded', flush=True)
 
-    plot_qc(adata, sample_key=sample_key, color_by= color_by, figsize= None, custom_order = None)
-    plot_doublets(adata, sample_key, color_by)
+    plot_qc(adata, sample_key=sample_key, color_by= color_by, figsize= None, custom_order = None, filename=filename)
+    plot_doublets(adata, sample_key, color_by, filename)
 
     print("\nQC plots succesfully generetad!")
 
@@ -306,10 +325,12 @@ if __name__ == "__main__":
     parser.add_argument('--adata_dir', required=True, help='Path to the adata object from QC module')
     parser.add_argument('--sample_key', required=True, help='Metadata field containing sample names')
     parser.add_argument('--color_by', required=True, help='Metadata field containing the categorical key to color QC plots')
-    
+    parser.add_argument('-f', '--filename', type=str, required=False, default='adata', help='Filename for the output files')
+
     args = parser.parse_args()
     
     main(args.adata_dir,
         args.sample_key,
-        args.color_by
+        args.color_by,
+        args.filename
     )
