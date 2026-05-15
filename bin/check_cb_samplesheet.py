@@ -26,20 +26,20 @@ def check_samplesheet(samplesheet_file: str):
     errors = []
 
     try:
-        samplesheet = pd.read_csv(samplesheet_file, sep='\t')
+        samplesheet = pd.read_csv(samplesheet_file)
 
         # Check required columns
-        required_cols = ['sample', 'matrix_path']
+        required_cols = ['dataset', 'alignment_dir', 'learning_rate', 'expected_cells', 'total_droplets_included']
         missing_cols = [col for col in required_cols if col not in samplesheet.columns]
 
         if missing_cols:
-            errors.append(f"Missing required columns: {missing}")
+            errors.append(f"Missing required columns: {missing_cols}")
             return False, errors
 
         # Validate each row
         for row_num, row in samplesheet.iterrows():
-            sample_id = row['sample'].strip()
-            matrix_path = row['matrix_path'].strip()
+            sample_id = row['dataset'].strip()
+            matrix_path = row['alignment_dir'].strip()
             learning_rate = row['learning_rate']
             expected_cells = row['expected_cells']
             total_droplets_included = row['total_droplets_included']
@@ -77,7 +77,7 @@ def main(samplesheet):
 if __name__ == '__main__':
 
     parser = argparse.ArgumentParser(description='Validate cellbender samplesheet')
-    parser.add_argument('samplesheet', help='Samplesheet TSV file')
+    parser.add_argument('--samplesheet', help='Samplesheet TSV file')
 
     args = parser.parse_args()
 

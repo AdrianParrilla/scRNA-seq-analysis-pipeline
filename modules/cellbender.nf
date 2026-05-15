@@ -1,29 +1,35 @@
 process cellbender { 
     label "cellbender"
 
-    debug true
+    publishDir path: { "${out_dir}/cellbender/${dataset}" }, mode: 'copy', overwrite: true
+
 
     input:
-        path input_mat
+        tuple val(dataset), path(alignment_dir), val(out_dir), val(lr), val(exp), val(total)
+         
 
     output:
-        path "*_cellbender_filtered.h5", emit: cb_matrix
-        path "*_cellbender_metrics.csv", emit: metrics
-        path "*_cellbender.pdf"        , emit: report
-        path "*_cellbender_report.html", emit: html_report, optional: true
-        path "*_cellbender.log"        , emit: log
+        tuple val(dataset), path ("*_cellbender_filtered.h5"), emit: cb_matrix
+        tuple val(dataset), path ("*_cellbender.h5")         , emit: cb_matrix_raw
+        tuple val(dataset), path ("*.csv")                   , emit: metrics
+        tuple val(dataset), path ("*_cellbender.pdf")        , emit: report
+        tuple val(dataset), path ("*_cellbender_report.html"), emit: html_report, optional: true
+        tuple val(dataset), path ("*_cellbender.log")        , emit: log
 
     script:
-        def out_prefix = "${input_mat.baseName}_cellbender"
-        def expected_cells = params.cellbender.expected_cells ? "--expected-cells ${params.cellbender.expected_cells}" : ""
-        def total_droplets = params.cellbender.total_droplets_included ? "--total-droplets-included ${params.cellbender.total_droplets_included}" : ""
+        def input_mat = "${alignment_dir}/outs/multi/count/raw_feature_bc_matrix.h5"
+
+        def lr_flag    = lr ? "--learning-rate ${lr}" : ""
+        def exp_flag   = exp ? "--expected-cells ${exp}" : ""
+        def total_flag = total ? "--total-droplets-included ${total}" : ""
+
         """
         cellbender remove-background \\
             --cuda \\
             --input ${input_mat} \\
-            --output ${out_prefix}.h5 \\
-            --learning-rate ${params.cellbender.learning_rate} \\
-            ${expected_cells} \\
-            ${total_droplets}
+            --output ${dataset}_cellbender \\
+            ${lr_flag} \\
+            ${exp_flag} \\
+            ${total_flag}
         """
         } 

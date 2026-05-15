@@ -72,12 +72,12 @@ def preprocess_adata(adata, layer, batch_key, n_genes):
 
 
 
-def dim_reduction_plotting(adata, filename, batch_key, reduction:str):
+def dim_reduction_plotting(adata, filename, label_key, reduction:str):
 
     sc.pp.neighbors(adata, use_rep=reduction)
     sc.tl.umap(adata, min_dist=0.2, spread=5, random_state=42)
 
-    axes = sc.pl.umap(adata, color=batch_key, show=False)
+    axes = sc.pl.umap(adata, color=label_key, show=False)
     fig = axes.get_figure()
     fig.savefig(f'{filename}_UMAP_{reduction}.png', bbox_inches='tight')
 
@@ -343,7 +343,7 @@ def main(adata_dir, n_genes= 2000, layer='counts', label_key='cell_type', batch_
         print(f"Label key: {lk_present} not present in adata.obs, skipping scANVI integration and metrics calculation.", flush=True)
     else:
           # ----------- STACAS integration ---------
-        adata = STACAS(adata, adata_integ, layer, batch_key, label_key)
+        adata = STACAS(adata, adata_integ, layer, batch_key, Scanorama)
 
         # ---------- scVI integrarion ---------------
         adata = scANVI_integration(adata, adata_integ, model_scvi, label_key, batch_key)
@@ -358,7 +358,7 @@ def main(adata_dir, n_genes= 2000, layer='counts', label_key='cell_type', batch_
     plot_methods = [r for r in adata.obsm.keys() if r not in ['X_pca', 'X_umap']] # original is called unintegrated
 
     for reduction in plot_methods:
-        dim_reduction_plotting(adata, filename, batch_key, reduction)
+        dim_reduction_plotting(adata, filename, label_key, reduction)
 
 
 

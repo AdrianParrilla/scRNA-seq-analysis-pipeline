@@ -322,7 +322,7 @@ def main(adata_dir, sample_key, color_by, filename):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Plot QC results')
-    parser.add_argument('--adata_dir', required=True, help='Path to the adata object from QC module')
+    parser.add_argument('--adata', required=True, help='Path to the h5ad object from QC module')
     parser.add_argument('--sample_key', required=True, help='Metadata field containing sample names')
     parser.add_argument('--color_by', required=True, help='Metadata field containing the categorical key to color QC plots')
     parser.add_argument('-f', '--filename', type=str, required=False, default='adata', help='Filename for the output files')

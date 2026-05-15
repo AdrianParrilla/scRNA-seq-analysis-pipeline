@@ -1,8 +1,11 @@
 process plot_QC { 
     label "plot_QC" 
 
+    publishDir path: { "${out_dir}/QC_results/" }, mode: 'copy', overwrite: true
+
     input:
         path adata
+        val out_dir
         val sample_key
         val color_by
         val filename
@@ -17,6 +20,6 @@ process plot_QC {
 
     script:
         """
-        02_plot_QC.py --adata_dir ${adata} --sample_key ${sample_key} --color_by ${color_by} --filename ${filename}
+        02_plot_QC.py --adata ${adata} --sample_key ${sample_key} --color_by ${color_by} --filename ${filename}
         """
-        }
+    }

@@ -3,41 +3,89 @@
 nextflow.enable.dsl=2
 
 // Include modules
-include { parse_cb_samplesheet } from './modules/parse_cb_samplesheet'
+include { check_cb_samplesheet } from './modules/check_cb_samplesheet'
 include { cellbender } from './modules/cellbender'
+include { demultiplex } from './modules/demultiplex'
+include { run_QC } from './modules/run_QC'
+include { merge_adatas } from './modules/merge_adatas'
 include { QC } from './modules/QC'
 include { plot_QC } from './modules/plot_QC'
 include { integration } from './modules/integration'
 include { integration_metrics } from './modules/integration_metrics'
 
-/*
-workflow {
+
+
+workflow CELLBENDER {
     main:
-    input_mat = channel.fromPath(params.cellbender.input_mat)
-    data_pkl = channel.fromPath(params.QC.data_pkl)
-    metadata = channel.fromPath(params.metadata)
-    adata = channel.fromPath(params.adata_QC)
-    adata_integrated = channel.fromPath(params.adata_integrated)
 
-    //cellbender_results = cellbender(input_mat)
+        def out_dir   = "${params.outdir}/sc_processing"
 
-    QC(data_pkl, metadata, params.sample_key)
-    plot_QC(QC.out.adata_QC, params.sample_key, params.plot_QC.color_by)
-    integration(QC.out.adata_QC, params.filename, params.integration.n_genes, params.integration.label_key, params.integration.batch_key)
-    integration_metrics(integration.out.adata_integrated, params.filename, params.integration.label_key, params.integration.batch_key)
+        //def cb_out_dir = "/mnt/immunocompnas1/projects/liver-met/processing/cellbender"
 
-    }
-    */
+        check_cb_samplesheet(params.samplesheet)
+        
+        ch_data_dirs = check_cb_samplesheet.out.validated_csv
+            .splitCsv(header: true)
+            .map { row -> 
+                def alignment_dir = file(row.alignment_dir, type: 'dir', checkIfExists: true)
+                
+                def lr    = row.learning_rate ?: null
+                def exp   = row.expected_cells ?: null
+                def total = row.total_droplets_included ?: null
+                
+                return tuple(row.dataset, alignment_dir, out_dir, lr, exp, total) 
+            }
+           
+        cellbender(ch_data_dirs)
+
+       
+        ch_data_dirs = channel
+            .fromPath(params.samplesheet)
+            .splitCsv(header: true)
+            .map { row ->
+                def alignment_dir = file(row.alignment_dir, type: 'dir')
+                
+                return tuple(row.dataset, alignment_dir, out_dir)
+            }
+        
+        ch_demux_input = ch_data_dirs.join(cellbender.out.cb_matrix_raw)
+
+        /*
+        ch_demux_input = check_cb_samplesheet.out.validated_csv
+            .splitCsv(header: true)
+            .map { row -> 
+                def dataset = row.dataset
+                def alignment_dir = file(row.alignment_dir, type: 'dir', checkIfExists: true)
+                
+                def cb_matrix_raw = file("${cb_out_dir}/${dataset}/raw_feature_bc_matrix_cellbender.h5", checkIfExists: true)
+                
+                return tuple(dataset, alignment_dir, out_dir, cb_matrix_raw) 
+            }
+            */
+
+        demultiplex(ch_demux_input)
+        
+}
+
+
+
 
 
 workflow QC_WORKFLOW {
     main:
-        data_pkl = channel.fromPath(params.QC.data_pkl)
-        metadata = channel.fromPath(params.metadata)
-        adata = channel.fromPath(params.adata_QC)
 
-        QC(data_pkl, metadata, params.sample_key, params.filename)
-        plot_QC(QC.out.adata_QC, params.sample_key, params.plot_QC.color_by, params.filename)
+        def out_dir   = "${params.outdir}/sc_processing"
+
+        ch_h5ad_files = channel
+                    .fromPath("${params.outdir}/sc_processing/samples_demultiplexed/*.h5ad", checkIfExists: true)
+                    .map { it -> 
+                        return tuple(it.baseName, it, out_dir) 
+                    }
+
+        run_QC(ch_h5ad_files)
+        merge_adatas(run_QC.out.qc_h5ad.collect(), params.metadata, out_dir, params.sample_key, params.filename)
+        //QC(data_pkl, metadata, params.sample_key, params.filename)
+        plot_QC(merge_adatas.out.merged_adata, out_dir, params.sample_key, params.plot_QC.color_by, params.filename)
         
 }
 
@@ -59,9 +107,12 @@ workflow {
     } else if (params.run_workflow == 'integration') {
         log.info "Executing Integration Workflow..."
         INTEGRATION_WORKFLOW()
+
+    } else if (params.run_workflow == 'cellbender') {
+        log.info "Executing Cellbender Workflow..."
+        CELLBENDER()
         
     } else {
-        // Failsafe in case of a typo in the config
-        exit 1, "ERROR: Invalid workflow specified. Set params.run_workflow to 'QC' or 'integration' in your config."
+        exit 1, "ERROR: Invalid workflow specified. Set params.run_workflow to 'QC', 'integration' or 'cellbender' in your config."
     }
 }
