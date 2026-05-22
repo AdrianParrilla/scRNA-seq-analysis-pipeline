@@ -8,10 +8,10 @@ include { cellbender } from './modules/cellbender'
 include { demultiplex } from './modules/demultiplex'
 include { run_QC } from './modules/run_QC'
 include { merge_adatas } from './modules/merge_adatas'
-include { QC } from './modules/QC'
 include { plot_QC } from './modules/plot_QC'
 include { integration } from './modules/integration'
 include { integration_metrics } from './modules/integration_metrics'
+include { integration_plots } from './modules/integration_plots'
 
 
 
@@ -20,10 +20,12 @@ workflow CELLBENDER {
 
         def out_dir   = "${params.outdir}/sc_processing"
 
-        //def cb_out_dir = "/mnt/immunocompnas1/projects/liver-met/processing/cellbender"
-
+        def cb_out_dir = "/mnt/immunocompnas1/projects/liver-met/processing/cellbender"
+        
+        
         check_cb_samplesheet(params.samplesheet)
         
+        /*
         ch_data_dirs = check_cb_samplesheet.out.validated_csv
             .splitCsv(header: true)
             .map { row -> 
@@ -35,9 +37,9 @@ workflow CELLBENDER {
                 
                 return tuple(row.dataset, alignment_dir, out_dir, lr, exp, total) 
             }
-           
+      
         cellbender(ch_data_dirs)
-
+        
        
         ch_data_dirs = channel
             .fromPath(params.samplesheet)
@@ -49,8 +51,8 @@ workflow CELLBENDER {
             }
         
         ch_demux_input = ch_data_dirs.join(cellbender.out.cb_matrix_raw)
-
-        /*
+        */
+       
         ch_demux_input = check_cb_samplesheet.out.validated_csv
             .splitCsv(header: true)
             .map { row -> 
@@ -61,13 +63,11 @@ workflow CELLBENDER {
                 
                 return tuple(dataset, alignment_dir, out_dir, cb_matrix_raw) 
             }
-            */
+        
 
         demultiplex(ch_demux_input)
         
 }
-
-
 
 
 
@@ -77,25 +77,27 @@ workflow QC_WORKFLOW {
         def out_dir   = "${params.outdir}/sc_processing"
 
         ch_h5ad_files = channel
-                    .fromPath("${params.outdir}/sc_processing/samples_demultiplexed/*.h5ad", checkIfExists: true)
+                    .fromPath("${params.outdir}/sc_processing/checkpoints/samples_demultiplexed/*.h5ad", checkIfExists: true)
                     .map { it -> 
                         return tuple(it.baseName, it, out_dir) 
                     }
 
         run_QC(ch_h5ad_files)
-        merge_adatas(run_QC.out.qc_h5ad.collect(), params.metadata, out_dir, params.sample_key, params.filename)
-        //QC(data_pkl, metadata, params.sample_key, params.filename)
-        plot_QC(merge_adatas.out.merged_adata, out_dir, params.sample_key, params.plot_QC.color_by, params.filename)
+        merge_adatas(run_QC.out.qc_h5ad.collect(), params.metadata, out_dir, params.merge_adatas.sample_key_merge, params.filename)
+        plot_QC(merge_adatas.out.merged_adata, out_dir, params.plot_QC.sample_key_plot, params.plot_QC.color_by, params.filename)
         
 }
 
 
 workflow INTEGRATION_WORKFLOW {
     main:
-        adata_annotated = channel.fromPath(params.adata_annotated)
+        def out_dir = "${params.outdir}/sc_processing"
 
-        integration(adata_annotated, params.filename, params.integration.n_genes, params.integration.label_key, params.integration.batch_key)
-        integration_metrics(integration.out.adata_integrated, params.filename, params.integration.label_key, params.integration.batch_key)
+        adata_annotated = channel.fromPath(params.integration.adata_annotated)
+
+        integration(adata_annotated, params.filename, params.integration.n_genes, params.integration.label_key, params.integration.batch_key, out_dir)
+        integration_metrics(integration.out.adata_integrated, params.filename, params.integration.label_key, params.integration.batch_key, out_dir)
+        integration_plots(integration_metrics.out.metrics_csv, out_dir)
 }
 
 

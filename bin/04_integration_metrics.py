@@ -72,7 +72,7 @@ def main(adata_dir, label_key='cell_type', batch_key='batch', filename = 'adata'
 
 if __name__ == "__main__":
 
-    parser = argparse.ArgumentParser(description='Integrate scRNA seq data from different batches using scVI')
+    parser = argparse.ArgumentParser(description='Generate integration metrics.')
     parser.add_argument('-i', '--adata_dir', type=str, required=True, help='Input directory of the h5ad file containing the anndata object.')
     parser.add_argument('-l', '--label_key', type=str, required=False, default='cell_type', help='Column from adata.obs where the cell types are specified. Default: cell_type')
     parser.add_argument('-b', '--batch_key', type=str, required=False, default='batch', help='Column from adata.obs where the sample batch is specified. Default: batch')

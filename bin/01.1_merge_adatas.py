@@ -1,52 +1,73 @@
 #!/opt/env/bin/python
-    
+
+import os
 import scanpy as sc
 import pandas as pd
 import anndata as ad
 from glob import glob
+import argparse
 
 def parse_metadata(adata, metadata_path, sample_key="sample"):
     """
     Merges metadata from a CSV into an AnnData object.
     """
     print(f"Parsing metadata from {metadata_path}...")
+
+    if not os.path.exists(metadata_path):
+        raise FileNotFoundError(f"Metadata file not found at: {os.path.abspath(metadata_path)}")
     
-    try:
-        # Load metadata
-        samples_metadata = pd.read_csv(metadata_path)
-        
-        # Ensure the join key exists in both objects
-        if sample_key not in adata.obs.columns:
-            raise KeyError(f"'{sample_key}' not found in adata.obs")
-        if sample_key not in samples_metadata.columns:
-            raise KeyError(f"'{sample_key}' not found in metadata file")
+    # Load metadata
+    samples_metadata = pd.read_csv(metadata_path)
+    
+    # Ensure the join key exists in both objects
+    if sample_key not in adata.obs.columns:
+        raise KeyError(f"'{sample_key}' not found in adata.obs")
+    if sample_key not in samples_metadata.columns:
+        raise KeyError(f"'{sample_key}' not found in metadata file")
 
-        # Setting index on metadata allows for a cleaner join
-        samples_metadata = samples_metadata.set_index(sample_key)
-        
-        adata.obs = adata.obs.join(samples_metadata, on=sample_key, how="left")
+    # Setting index on metadata allows for a cleaner join
+    samples_metadata = samples_metadata.set_index(sample_key)
+    
+    adata.obs = adata.obs.join(samples_metadata, on=sample_key, how="left")
 
-        for col in adata.obs.columns:
-            if adata.obs[col].dtype == 'object':
-                adata.obs[col] = adata.obs[col].astype('category')
-        
-        print("Metadata successfully integrated.")
-        return adata
+    # Redefine cell types
+    for col in adata.obs.columns:
+        if adata.obs[col].dtype == 'object':
+            adata.obs[col] = adata.obs[col].astype('category')
 
-    except FileNotFoundError:
-        print(f"Error: The file at {metadata_path} was not found.")
-    except Exception as e:
-        print(f"An error occurred: {e}")
-        raise
+    # remove samples that are not in the metadata (NA)
+    adata = adata[~adata.obs[sample_key].isna()]
+
+    print(f'removed {adata.obs[sample_key].isna().sum()} barcodes with NA values in {sample_key}')
+
+    # reorder sample_key to match metadata order
+    desired_order = samples_metadata.index.drop_duplicates().tolist()
+    adata.obs[sample_key] = pd.Categorical(adata.obs[sample_key], categories=desired_order, ordered=True)
+    sorted_barcodes = adata.obs.sort_values(sample_key).index
+    adata = adata[sorted_barcodes]
+    
+    print("Metadata successfully integrated.")
+    return adata
+
 
 
 def main(adatas_dir, metadata_path, filename, sample_key="sample"):
     
-    files = glob("samples_QC/*.h5ad")
-    adatas = [sc.read_h5ad(f) for f in files]
+    search_path = os.path.join(adatas_dir, "*_QC.h5ad")
+    files = glob(search_path)
+
+    if not files:
+        raise FileNotFoundError(f"No .h5ad files found in {adatas_dir}")
+
+    print(f"Found {len(files)} files. Concatenating...")
+
+    adatas_dict = { 
+        os.path.basename(f).split('_QC.h5ad')[0]: sc.read_h5ad(f)  # get sample name
+        for f in files 
+    }
 
     # Concatenate all
-    adata_concat = ad.concat(adatas, label="sample", join="outer")
+    adata_concat = ad.concat(adatas_dict, label=sample_key, join="outer")
     adata_concat.obs_names_make_unique()
 
     # remove genes express in less than 3 cells
@@ -54,16 +75,16 @@ def main(adatas_dir, metadata_path, filename, sample_key="sample"):
     adata_concat = adata_concat[:, ~adata_concat.var.index.str.contains('DEPRECATED_')]
 
     # setting cell names as column
-    adatas_concat.obs['cell_name'] = adatas_concat.obs.index.values.copy()
+    adata_concat.obs['cell_name'] = adata_concat.obs.index.values.copy()
 
     #Add metadata
-    adata = parse_metadata(adatas_concat, metadata_path, sample_key=sample_key)
+    adata_concat = parse_metadata(adata_concat, metadata_path, sample_key=sample_key)
 
     # Set counts layer
-    adata.layers['counts'] = adata.X
+    adata_concat.layers['counts'] = adata_concat.X.copy()
 
     print("Saving adata after QC...")
-    adatas_concat.write(f'01_{filename}_concat_QC.h5ad')
+    adata_concat.write(f'01_{filename}_concat_QC.h5ad')
     print("QC completed!")
 
 
@@ -77,7 +98,7 @@ if __name__ == "__main__":
     
     args = parser.parse_args()
     
-    main(args.data_pkl,
-        args.metadata_path,
-        args.sample_key,
-        args.filename)
+    main(adatas_dir=args.adatas_dir,
+            metadata_path=args.metadata_path,
+            filename=args.filename,
+            sample_key=args.sample_key)

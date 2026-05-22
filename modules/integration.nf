@@ -1,6 +1,7 @@
 process integration { 
     label "integration"
-    stageInMode 'copy'
+    
+    publishDir path: { "${out_dir}/integration/" }, mode: 'copy', overwrite: true
     
     input:
         path adata
@@ -8,10 +9,11 @@ process integration {
         val n_genes
         val label_key
         val batch_key
+        val out_dir
 
     output:
         path "*.h5ad",        emit: adata_integrated
-        path "*_UMAP_*.png",  emit: umap_plots
+        path "umap_plots/*_UMAP_*.png",  emit: umap_plots
 
     script:
         """

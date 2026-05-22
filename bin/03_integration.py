@@ -7,10 +7,7 @@ import anndata as ad
 import harmonypy as hm
 import scanpy as sc
 import scanorama
-import scanpy.external as sce
 from scvi.model import SCVI, SCANVI
-from scib_metrics.benchmark import Benchmarker
-import scib
 import argparse
 import torch  
 import anndata2ri
@@ -79,8 +76,11 @@ def dim_reduction_plotting(adata, filename, label_key, reduction:str):
 
     axes = sc.pl.umap(adata, color=label_key, show=False)
     fig = axes.get_figure()
-    fig.savefig(f'{filename}_UMAP_{reduction}.png', bbox_inches='tight')
 
+    os.makedirs('umap_plots', exist_ok=True)
+
+    fig.savefig(f'umap_plots/{filename}_UMAP_{reduction}.png', bbox_inches='tight')
+    
     print(f'\nUMAP plot for {reduction} succesfully generated!', flush=True)
 
 
@@ -130,8 +130,8 @@ def scanorama_integration(adata, adata_integ, batch_key):
         adata_integ[adata_integ.obs[batch_key] == batch_value].copy() 
         for batch_value in adata_integ.obs[batch_key].unique()
         ]    
-
-    scanorama.integrate_scanpy(adata_list, dimred = 100)
+    dimred = min(100, adata_integ.obsm["Unintegrated"].shape[1])
+    scanorama.integrate_scanpy(adata_list, dimred = dimred)
 
     scanorama_int = [ad.obsm['X_scanorama'] for ad in adata_list]
     cell_names = [ad.obs_names for ad in adata_list]
@@ -291,7 +291,7 @@ def scANVI_integration(adata, adata_integ, model_scvi, label_key, batch_key):
     unlabeled_category="Unknown"
     )
 
-    model_scanvi.train(max_epochs=20, n_samples_per_label=100)
+    model_scanvi.train(max_epochs=20, accelerator=device, n_samples_per_label=100)
 
     adata.obsm["scANVI"] = model_scanvi.get_latent_representation()
 
@@ -343,7 +343,7 @@ def main(adata_dir, n_genes= 2000, layer='counts', label_key='cell_type', batch_
         print(f"Label key: {lk_present} not present in adata.obs, skipping scANVI integration and metrics calculation.", flush=True)
     else:
           # ----------- STACAS integration ---------
-        adata = STACAS(adata, adata_integ, layer, batch_key, Scanorama)
+        adata = STACAS(adata, adata_integ, layer, batch_key, label_key)
 
         # ---------- scVI integrarion ---------------
         adata = scANVI_integration(adata, adata_integ, model_scvi, label_key, batch_key)
@@ -368,7 +368,7 @@ def main(adata_dir, n_genes= 2000, layer='counts', label_key='cell_type', batch_
 
 if __name__ == "__main__":
 
-    parser = argparse.ArgumentParser(description='Integrate scRNA seq data from different batches using scVI')
+    parser = argparse.ArgumentParser(description='Benchmark different scRNA integration methods.')
     parser.add_argument('-i', '--adata_dir', type=str, required=True, help='Input directory of the h5ad file containing the anndata object.')
     parser.add_argument('-lk', '--label_key', type=str, required=False, default='cell_type', help='Column from adata.obs where the cell types are specified. Default: cell_type')
     parser.add_argument('-bk', '--batch_key', type=str, required=False, default='batch', help='Column from adata.obs where the sample batch is specified. Default: batch')

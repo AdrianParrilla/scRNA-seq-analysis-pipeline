@@ -78,7 +78,7 @@ def get_colors(df, color_by):
     Get the number of colors needed from the color palette
     '''
     color_palette = ["#fd756f", "#7eb0d5", "#b2e061", "#bd7ebe", "#ffb55a", "#ffee65", "#beb9db",
-                      "#fdcce5", "#bba387", "#c0d9af", "#b5b5b5", "#606060"] 
+                      "#fdcce5", "#bba387", "#c0d9af", "#1ABC9C", "#606060"] 
 
     n_colors = df[color_by].nunique()
 
@@ -329,7 +329,7 @@ if __name__ == "__main__":
 
     args = parser.parse_args()
     
-    main(args.adata_dir,
+    main(args.adata,
         args.sample_key,
         args.color_by,
         args.filename
