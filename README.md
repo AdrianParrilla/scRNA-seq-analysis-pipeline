@@ -4,4 +4,4 @@ Nextflow pipeline for the preprocessing of multiplexed scRNA-seq data. The pipel
   <img src="./images/pipeline_diagram.png" width="800">
 </p>
 
-Demultiplexing step is performed by extracting the barcodes called by the aligner from the cellbender output matrix.
+Demultiplexing step is performed by extracting the barcodes called by the aligner from the cellbender output matrix. Integration benchmark is performed by comparing six widely used tools were compared: Harmony, Scanorama, Seurat-RPCA, STACAS, scVI, and scANVI.
