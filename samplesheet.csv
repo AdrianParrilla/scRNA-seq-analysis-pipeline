@@ -1,0 +1,2 @@
+dataset,alignment_dir,learning_rate,expected_cells,total_droplets_included
+Pool_1,/path/to/pool_1,,,
