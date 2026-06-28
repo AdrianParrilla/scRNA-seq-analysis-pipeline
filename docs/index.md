@@ -1,13 +1,8 @@
 ```{include} ../README.md
 
 ```
-
+```yaml
 ```{toctree}
-:maxdepth: 1
-:hidden: true
-
-api/index
-notebooks/index
-changelog
-references
+:maxdepth: 2
+:caption: Contents
 ```
