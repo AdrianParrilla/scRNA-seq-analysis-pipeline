@@ -12,7 +12,8 @@ build:
     build:
       html:
         - uvx hatch run docs:build
-        - cp -r docs/_build/html/. $READTHEDOCS_OUTPUT
+        - mkdir -p $READTHEDOCS_OUTPUT/html
+        - cp -r docs/_build/html/. $READTHEDOCS_OUTPUT/html/
 
 submodules:
   include: all
