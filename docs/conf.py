@@ -18,16 +18,13 @@ sys.path.insert(0, str(HERE / "extensions"))
 
 # NOTE: If you installed your project in editable mode, this might be stale.
 #       If this is the case, reinstall it to refresh the metadata
-info = metadata("infercnvpy")
-project_name = info["Name"]
-author = info["Author"]
+project_name = "scRNA-seq-analysis-pipeline"
+author = "Adrian Parrilla"
 copyright = f"{datetime.now():%Y}, {author}."
-version = info["Version"]
-urls = dict(pu.split(", ") for pu in info.get_all("Project-URL"))
-repository_url = urls["Source"]
+version = "0.1.0"
+release = "0.1.0"
+repository_url = "https://github.com/AdrianParrilla/scRNA-seq-analysis-pipeline"
 
-# The full version, including alpha/beta/rc tags
-release = info["Version"]
 
 bibtex_bibfiles = ["references.bib"]
 templates_path = ["_templates"]
@@ -36,9 +33,9 @@ needs_sphinx = "4.0"
 
 html_context = {
     "display_github": True,  # Integrate GitHub
-    "github_user": "icbi-lab",  # Username
+    "github_user": "AdrianParrilla",  # Your GitHub Username
     "github_repo": project_name,  # Repo name
-    "github_version": "main",  # Version
+    "github_version": "main",  # Version branch
     "conf_py_path": "/docs/",  # Path in the checkout to the docs root
 }
 

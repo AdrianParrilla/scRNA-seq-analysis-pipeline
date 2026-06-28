@@ -1,0 +1,24 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "scRNA-seq-analysis-pipeline"
+version = "0.1.0"
+description = "A pipeline for scRNA-seq analysis"
+dependencies = []
+
+[tool.hatch.envs.docs]
+detached = true
+dependencies = [
+    "sphinx>=4.0",
+    "sphinx-book-theme",
+    "myst-nb",
+    "sphinx-copybutton",
+    "sphinxcontrib-bibtex",
+    "sphinx-autodoc-typehints",
+    "sphinxext-opengraph",
+]
+
+[tool.hatch.envs.docs.scripts]
+build = "sphinx-build -b html docs/ docs/_build/html"
