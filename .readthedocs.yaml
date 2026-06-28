@@ -12,7 +12,7 @@ build:
     build:
       html:
         - uvx hatch run docs:build
-        - mv docs/_build/html $READTHEDOCS_OUTPUT
+        - cp -r docs/_build/html/. $READTHEDOCS_OUTPUT
 
 submodules:
   include: all
