@@ -8,6 +8,10 @@ version = "0.1.0"
 description = "A pipeline for scRNA-seq analysis"
 dependencies = []
 
+# --- ADD THIS BLOCK TO FIX THE ERROR ---
+[tool.hatch.build.targets.wheel]
+packages = [] # Tells hatch there is no core python package directory to ship
+
 [tool.hatch.envs.docs]
 detached = true
 dependencies = [
